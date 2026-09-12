@@ -9,6 +9,8 @@ on:
 jobs:
   renew:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: 📥 检出代码
@@ -160,4 +162,29 @@ jobs:
           PANEL_COOKIE: ${{ secrets.PANEL_COOKIE }}   # ✅ 关键修复：传递 Cookie
         run: python3 script.py
 
-      # 已移除"最终通知"步骤，只保留脚本内部的续期结果通知
+      - name: ⏱️ 更新 README 时间戳并提交（保活 Actions）
+        if: always()
+        run: |
+          CURRENT_TIME=$(date -u "+%Y-%m-%d %H:%M:%S UTC")
+          export CURRENT_TIME
+          python3 -c "
+          import os, re
+          time_str = os.environ.get('CURRENT_TIME', '')
+          with open('README.md', 'r', encoding='utf-8') as f:
+              content = f.read()
+          pattern = r'<!-- KEEP_ALIVE_START -->[\s\S]*?<!-- KEEP_ALIVE_END -->'
+          replacement = f'<!-- KEEP_ALIVE_START -->\n> ⏱️ **最后保活运行时间**：{time_str}\n<!-- KEEP_ALIVE_END -->'
+          new_content = re.sub(pattern, replacement, content)
+          with open('README.md', 'w', encoding='utf-8') as f:
+              f.write(new_content)
+          "
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          if ! git diff --staged --quiet; then
+            git commit -m "chore: 更新保活时间戳 [$CURRENT_TIME] [skip ci]"
+            git push origin HEAD
+          else
+            echo "README 内容无变动，跳过提交"
+          fi
+
